@@ -4,16 +4,20 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.eventbus.Subscribe;
+
+import java.awt.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.net.URI;
+import java.util.Objects;
 import java.util.Set;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
@@ -39,6 +43,9 @@ public class test_plugin extends Plugin
     private final Gson gson = new Gson();
     private static final String SERVER_URL = "http://localhost:5000/receive_data";
     private static final Set<Integer> TREE_IDS = Set.of(1276, 1277, 1278, 1279, 1280);
+    private static final Set<Integer> OAK_TREE_IDS = Set.of(10820);
+    private static final Set<Integer> WILLOW_TREE_IDS = Set.of(10833, 10829, 10819, 10831);
+    private static final Set<Integer> TIN_COPPER_ORE = Set.of(10943, 11161, 11360, 11361);
     private ScheduledExecutorService executorService;
 
     @Inject
@@ -47,7 +54,8 @@ public class test_plugin extends Plugin
     @Override
     protected void startUp() throws Exception {
         executorService = Executors.newSingleThreadScheduledExecutor();
-        executorService.scheduleAtFixedRate(this::compileAndSendData, 0, 1, TimeUnit.SECONDS);
+        executorService.scheduleAtFixedRate(this::compileAndSendData, 0, 200, TimeUnit.MILLISECONDS); // Poll twice per second
+
     }
 
     @Override
@@ -57,31 +65,48 @@ public class test_plugin extends Plugin
         executorService.shutdown();
     }
 
-    @Subscribe
-    public void onStatChanged(StatChanged event) {
-        if (event.getSkill() == Skill.HITPOINTS) {
-            int hitpoints = event.getLevel();
-            sendHitpoints(hitpoints);
+    // Gets the inventory count and array
+    private JsonObject gatherInventoryData() {
+        JsonObject inventoryData = new JsonObject();
+        ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
+
+        if (inventory != null) {
+            int inventoryCount = 0;
+            JsonArray itemsArray = new JsonArray();
+
+            for (Item item : inventory.getItems()) {
+                JsonObject itemObject = new JsonObject();
+                itemObject.addProperty("id", item.getId());
+                itemObject.addProperty("quantity", item.getQuantity());
+                itemsArray.add(itemObject);
+                if (item.getId() != -1) { // Assuming -1 is an empty slot
+                    inventoryCount++;
+                }
+            }
+
+            inventoryData.addProperty("inventoryCount", inventoryCount);
+            inventoryData.add("items", itemsArray);
         }
+
+        return inventoryData;
     }
 
-    public void sendHitpoints(int hitpoints) {
-        String jsonPayload = "{\"hitpoints\":" + hitpoints + "}";
-        System.out.println("Sending payload: " + jsonPayload); // Debug print
+    // Gets position of the player on the screen so we can find objects closest to the player
+    private JsonObject gatherPlayerPosition() {
+        JsonObject playerPosition = new JsonObject();
+        Player localPlayer = client.getLocalPlayer();
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:5000/receive_data"))
-                .header("Content-Type", "application/json")
-                .POST(BodyPublishers.ofString(jsonPayload))
-                .build();
+        if (localPlayer != null) {
+            LocalPoint localPoint = localPlayer.getLocalLocation();
+            Point screenPoint = Perspective.localToCanvas(client, localPoint, client.getPlane());
 
-        httpClient.sendAsync(request, BodyHandlers.ofString())
-                .thenApply(HttpResponse::body)
-                .thenAccept(responseBody -> System.out.println("Response: " + responseBody)) // More detailed print
-                .exceptionally(e -> {
-                    e.printStackTrace();
-                    return null;
-                });
+            if (screenPoint != null) {
+                playerPosition.addProperty("playerX", screenPoint.getX());
+                playerPosition.addProperty("playerY", screenPoint.getY());
+            }
+        }
+
+        return playerPosition;
     }
 
     // Gets the bounding boxes of trees
@@ -94,21 +119,15 @@ public class test_plugin extends Plugin
                 for (Tile tile : xCoord) {
                     if (tile != null) {
                         for (GameObject gameObject : tile.getGameObjects()) {
-                            if (gameObject != null && TREE_IDS.contains(gameObject.getId())) {
-                                LocalPoint lp = gameObject.getLocalLocation();
-                                Point centerScreenPoint = Perspective.localToCanvas(client, lp, gameObject.getPlane());
-                                if (centerScreenPoint != null) {
-                                    int size = 32;
-                                    int titleBarHeight = 50; // Estimate this value
-                                    int borderLeftWidth = 10; // Estimate this value
-                                    Point topLeft = new Point(centerScreenPoint.getX() - size / 2, centerScreenPoint.getY() - size / 2);
-                                    Point bottomRight = new Point(centerScreenPoint.getX() + size / 2, centerScreenPoint.getY() + size / 2);
-
+                            if (gameObject != null && TIN_COPPER_ORE.contains(gameObject.getId())) {
+                                Shape clickbox = gameObject.getClickbox();
+                                if (clickbox != null) {
+                                    Rectangle bounds = clickbox.getBounds();
                                     JsonObject json = new JsonObject();
-                                    json.addProperty("topLeftX", (topLeft.getX() + borderLeftWidth));
-                                    json.addProperty("topLeftY", (topLeft.getY() + titleBarHeight));
-                                    json.addProperty("bottomRightX", (bottomRight.getX() + borderLeftWidth));
-                                    json.addProperty("bottomRightY", (bottomRight.getY() + titleBarHeight));
+                                    json.addProperty("topLeftX", bounds.getMinX());
+                                    json.addProperty("topLeftY", bounds.getMinY());
+                                    json.addProperty("bottomRightX", bounds.getMaxX());
+                                    json.addProperty("bottomRightY", bounds.getMaxY());
                                     treeBoundingBoxes.add(json);
                                 }
                             }
@@ -120,15 +139,21 @@ public class test_plugin extends Plugin
         return treeBoundingBoxes;
     }
 
+
     // Gets the state of the player, animating and ismoving
     private JsonObject gatherPlayerStates() {
         JsonObject playerStates = new JsonObject();
         Player localPlayer = client.getLocalPlayer();
         boolean isAnimating = localPlayer != null && localPlayer.getAnimation() != -1;
         boolean isInteracting = localPlayer != null && localPlayer.isInteracting();
+        int walkAnimation = localPlayer.getWalkAnimation();
 
         playerStates.addProperty("isAnimating", isAnimating);
         playerStates.addProperty("isInteracting", isInteracting);
+
+        System.out.println("isAnimating : " + isAnimating);
+        System.out.println("isInteracting : " + isInteracting);
+        System.out.println("walkAnimation : " + walkAnimation);
 
         return playerStates;
     }
@@ -138,13 +163,25 @@ public class test_plugin extends Plugin
         try {
             JsonObject compiledData = new JsonObject();
 
+            // Gather player states
+            JsonObject playerStates = gatherPlayerStates();
+            compiledData.add("playerStates", playerStates);
+
+            // Gather the player position
+            JsonObject playerPosition = gatherPlayerPosition();
+            compiledData.add("playerPosition", playerPosition);
+
+            // Gather inventory data
+            JsonObject inventoryData = gatherInventoryData();
+            compiledData.add("inventoryData", inventoryData);
+
+            System.out.println("Compiled data before trees : " + compiledData);
+
             // Gather tree locations
             JsonArray treeLocations = gatherTreeLocations();
             compiledData.add("trees", treeLocations);
 
-            // Gather player states
-            JsonObject playerStates = gatherPlayerStates();
-            compiledData.add("playerStates", playerStates);
+            System.out.println("Full compiled data : " + compiledData);
 
             // Send the compiled JSON
             sendToPythonServer(gson.toJson(compiledData));
@@ -165,7 +202,7 @@ public class test_plugin extends Plugin
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println("Response from server: " + response.body());
         } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
+            System.out.println("Failure in sendToPythonServer || Is Server On?");
         }
     }
 }
