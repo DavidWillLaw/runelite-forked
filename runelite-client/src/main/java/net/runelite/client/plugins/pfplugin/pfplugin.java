@@ -1,44 +1,51 @@
-package net.runelite.client.plugins.test_plugin;
+package net.runelite.client.plugins.pfplugin;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.inject.Provides;
 import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
-import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.events.StatChanged;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.eventbus.Subscribe;
+import net.runelite.api.Client;
+import net.runelite.api.GameObject;
+import net.runelite.api.Perspective;
+import net.runelite.api.Point;
+import net.runelite.api.Tile;
 
 import java.awt.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.http.HttpRequest.BodyPublishers;
-import java.net.http.HttpResponse.BodyHandlers;
 import java.net.URI;
-import java.util.Objects;
+import java.util.Arrays;
 import java.util.Set;
-import net.runelite.api.Client;
-import net.runelite.api.GameObject;
 import javax.inject.Inject;
-import net.runelite.api.Perspective;
-import net.runelite.api.Point;
-import net.runelite.api.Tile;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import com.google.gson.Gson; // Ensure you have Gson in your project dependencies
 
 @PluginDescriptor(
-        name = "Example Plugin",
-        description = "An example plugin."
+        name = "PF Plugin",
+        description = "Does some stuff."
 )
 
-public class test_plugin extends Plugin
+public class pfplugin extends Plugin
 {
+    @Inject
+    private pfconfig config;
+
+    @Provides
+    pfconfig getConfig(ConfigManager configManager)
+    {
+        return configManager.getConfig(pfconfig.class);
+    }
+
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final Gson gson = new Gson();
     private static final String SERVER_URL = "http://localhost:5000/receive_data";
@@ -114,12 +121,19 @@ public class test_plugin extends Plugin
         JsonArray treeBoundingBoxes = new JsonArray();
         Tile[][][] tiles = client.getScene().getTiles();
 
+        // Fetch user-specified GameObject IDs from the plugin configuration
+        String gameObjectIdsConfig = config.gameObjectIds(); // Assuming 'config' is your @Inject'ed ExamplePluginConfig instance
+        Set<Integer> gameObjectIds = Arrays.stream(gameObjectIdsConfig.split(","))
+                .map(String::trim)
+                .map(Integer::parseInt)
+                .collect(Collectors.toSet());
+
         for (Tile[][] plane : tiles) {
             for (Tile[] xCoord : plane) {
                 for (Tile tile : xCoord) {
                     if (tile != null) {
                         for (GameObject gameObject : tile.getGameObjects()) {
-                            if (gameObject != null && TIN_COPPER_ORE.contains(gameObject.getId())) {
+                            if (gameObject != null && gameObjectIds.contains(gameObject.getId())) {
                                 Shape clickbox = gameObject.getClickbox();
                                 if (clickbox != null) {
                                     Rectangle bounds = clickbox.getBounds();
