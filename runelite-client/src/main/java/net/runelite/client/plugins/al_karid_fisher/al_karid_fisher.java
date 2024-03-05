@@ -71,7 +71,8 @@ public class al_karid_fisher extends Plugin
 
     // Returns whether the bank is open or not, returns True/False
     private boolean isBankOpen() {
-        Widget w = client.getWidget(ComponentID.BANK_CONTAINER);
+        Widget w = client.getWidget(
+                ComponentID.BANK_CONTAINER);
         if (w != null){
             return true;
         } else {
@@ -79,7 +80,18 @@ public class al_karid_fisher extends Plugin
         }
     }
 
-    // Gets the inventory count and array
+    public boolean isLevelUpOpen() {
+        Widget levelUpWidget = client.getWidget(WidgetID.LEVEL_UP);
+
+        if (levelUpWidget != null && !levelUpWidget.isHidden()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+
+        // Gets the inventory count and array
     private JsonObject gatherInventoryData() {
         JsonObject inventoryData = new JsonObject();
         ItemContainer inventory = client.getItemContainer(InventoryID.INVENTORY);
@@ -201,7 +213,8 @@ public class al_karid_fisher extends Plugin
         boolean isAnimating = localPlayer != null && localPlayer.getAnimation() != -1;
         boolean isInteracting = localPlayer != null && localPlayer.isInteracting();
         System.out.println("Checking if bank is open...");
-        boolean isBankOpen = isBankOpen(); // Adjust based on how you implement the check
+        boolean isBankOpen = isBankOpen();
+        boolean isLevelUpOpen = isLevelUpOpen();
         System.out.println("Bank open: " + isBankOpen);
         int walkAnimation = localPlayer.getWalkAnimation();
         // Get the player world location
@@ -213,6 +226,7 @@ public class al_karid_fisher extends Plugin
         playerStates.addProperty("x", playerWorldLocation.getX());
         playerStates.addProperty("y", playerWorldLocation.getY());
         playerStates.addProperty("isBankOpen", isBankOpen);
+        playerStates.addProperty("isLevelUpOpen", isLevelUpOpen);
 
         //System.out.println("isAnimating : " + isAnimating);
         //System.out.println("isInteracting : " + isInteracting);
