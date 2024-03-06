@@ -81,7 +81,7 @@ public class al_karid_fisher extends Plugin
     }
 
     public boolean isLevelUpOpen() {
-        Widget levelUpWidget = client.getWidget(WidgetID.LEVEL_UP);
+        Widget levelUpWidget = client.getWidget(WidgetID.LEVEL_UP_GROUP_ID);
 
         if (levelUpWidget != null && !levelUpWidget.isHidden()) {
             return true;
