@@ -302,7 +302,7 @@ public class al_karid_fisher extends Plugin
             JsonArray fishLocations = gatherFishLocations();
             compiledData.add("fishing_spots", fishLocations);
 
-            // Gather fishing locations
+            // Gather banking booth locations
             JsonArray bankBoothLocations = gatherBankBoothLocations();
             compiledData.add("bank_booths", bankBoothLocations);
 
