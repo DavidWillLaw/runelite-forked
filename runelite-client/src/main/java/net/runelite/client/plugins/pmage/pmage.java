@@ -5,7 +5,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.inject.Provides;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.runelite.api.*;
 import net.runelite.api.widgets.Widget;
@@ -15,6 +14,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.pmage.pmageconfig;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -37,10 +37,10 @@ public class pmage extends Plugin {
     private Client client;
 
     @Inject
-    private pmageconfig config;
+    private net.runelite.client.plugins.pmage.pmageconfig config;
 
     @Provides
-    pmageconfig getConfig(ConfigManager configManager) {
+    net.runelite.client.plugins.pmage.pmageconfig getConfig(ConfigManager configManager) {
         return configManager.getConfig(pmageconfig.class);
     }
 
