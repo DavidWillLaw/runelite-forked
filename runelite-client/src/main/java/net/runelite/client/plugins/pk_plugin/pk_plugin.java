@@ -77,6 +77,7 @@ public class pk_plugin extends Plugin {
 
     private void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress(SERVER_PORT), 0);
+        server.createContext("/", this::handleBasicResponse);
         server.createContext("/inventory", this::handleInventoryRequest);
         server.createContext("/config", this::handleConfigRequest);
         server.createContext("/player-states", this::handlePlayerStatesRequest);
@@ -97,42 +98,32 @@ public class pk_plugin extends Plugin {
                 .map(Integer::valueOf)
                 .collect(Collectors.toSet());
 
-        int boxWidth = 50;
-        int boxHeight = 50;
-
         for (NPC npc : npcs) {
             if (npc != null && npcIdsSet.contains(npc.getId()) && npc.getHealthRatio() == -1 && npc.getHealthScale() == -1) {
                 WorldPoint worldLocation = npc.getWorldLocation();
                 if (worldLocation != null) {
-                    LocalPoint localPoint = LocalPoint.fromWorld(client, worldLocation);
-                    if (localPoint != null) {
-                        Point screenPoint = Perspective.localToCanvas(client, localPoint, client.getPlane());
-                        if (screenPoint != null) {
-                            int topLeftX = screenPoint.getX() - boxWidth / 2;
-                            int topLeftY = screenPoint.getY() - boxHeight / 2;
-                            int bottomRightX = screenPoint.getX() + boxWidth / 2;
-                            int bottomRightY = screenPoint.getY() + boxHeight / 2;
+                    Shape hull = npc.getConvexHull();
+                    if (hull != null) {
+                        Rectangle bounds = hull.getBounds();
+                        JsonObject npcJson = new JsonObject();
+                        npcJson.addProperty("topLeftX", bounds.x);
+                        npcJson.addProperty("topLeftY", bounds.y);
+                        npcJson.addProperty("bottomRightX", bounds.x + bounds.width);
+                        npcJson.addProperty("bottomRightY", bounds.y + bounds.height);
+                        npcJson.addProperty("worldX", worldLocation.getX());
+                        npcJson.addProperty("worldY", worldLocation.getY());
+                        npcJson.addProperty("plane", worldLocation.getPlane());
+                        npcJson.addProperty("healthRatio", npc.getHealthRatio());
+                        npcJson.addProperty("healthScale", npc.getHealthScale());
 
-                            JsonObject npcJson = new JsonObject();
-                            npcJson.addProperty("topLeftX", topLeftX);
-                            npcJson.addProperty("topLeftY", topLeftY);
-                            npcJson.addProperty("bottomRightX", bottomRightX);
-                            npcJson.addProperty("bottomRightY", bottomRightY);
-                            npcJson.addProperty("worldX", worldLocation.getX());
-                            npcJson.addProperty("worldY", worldLocation.getY());
-                            npcJson.addProperty("plane", worldLocation.getPlane());
-                            npcJson.addProperty("healthRatio", npc.getHealthRatio());
-                            npcJson.addProperty("healthScale", npc.getHealthScale());
-
-                            npcDataArray.add(npcJson);
-                        }
+                        npcDataArray.add(npcJson);
                     }
                 }
             }
         }
-
         JsonObject npcData = new JsonObject();
         npcData.add("npcs", npcDataArray);
+        System.out.println(npcData);
         return npcData;
     }
 
@@ -252,6 +243,10 @@ public class pk_plugin extends Plugin {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(response.getBytes());
         }
+    }
+
+    private void handleBasicResponse(HttpExchange exchange) throws IOException {
+        System.out.print("\n ********* Basic response triggered ***************** \n");
     }
 
     private void handleInventoryRequest(HttpExchange exchange) throws IOException {
@@ -381,37 +376,53 @@ public class pk_plugin extends Plugin {
         }
     }
 
-    private void handlePlayerStatesRequest(HttpExchange exchange) throws IOException {
-        Player localPlayer = client.getLocalPlayer();
-        boolean isAnimating = localPlayer != null && localPlayer.getAnimation() != -1;
-        boolean isInteracting = localPlayer != null && localPlayer.isInteracting();
-        boolean isLevelUpOpen = isLevelUpOpen();
-        int boostedHitpoints = client.getBoostedSkillLevel(Skill.HITPOINTS); // Get boosted hitpoints
-        WorldPoint worldLocation = localPlayer != null ? localPlayer.getWorldLocation() : null;
+    private void handlePlayerStatesRequest(HttpExchange exchange) {
+        try {
+            System.out.println("Handling /player-states request."); // Log entry
+            Player localPlayer = client.getLocalPlayer();
+            boolean isAnimating = localPlayer != null && localPlayer.getAnimation() != -1;
+            boolean isInteracting = localPlayer != null && localPlayer.isInteracting();
+            boolean isLevelUpOpen = isLevelUpOpen();
+            int boostedHitpoints = client.getBoostedSkillLevel(Skill.HITPOINTS); // Get boosted hitpoints
+            WorldPoint worldLocation = localPlayer != null ? localPlayer.getWorldLocation() : null;
 
-        JsonObject playerStates = new JsonObject();
-        playerStates.addProperty("isAnimating", isAnimating);
-        playerStates.addProperty("isInteracting", isInteracting);
-        playerStates.addProperty("isLevelUpOpen", isLevelUpOpen);
-        playerStates.addProperty("boostedHitpoints", boostedHitpoints); // Add boosted hitpoints to JSON
+            JsonObject playerStates = new JsonObject();
+            playerStates.addProperty("isAnimating", isAnimating);
+            playerStates.addProperty("isInteracting", isInteracting);
+            playerStates.addProperty("isLevelUpOpen", isLevelUpOpen);
+            playerStates.addProperty("boostedHitpoints", boostedHitpoints); // Add boosted hitpoints to JSON
 
-        // Add world location if available
-        if (worldLocation != null) {
-            playerStates.addProperty("worldX", worldLocation.getX());
-            playerStates.addProperty("worldY", worldLocation.getY());
-            playerStates.addProperty("worldPlane", worldLocation.getPlane());
-        } else {
-            // Handle the case where player or location is null
-            playerStates.addProperty("worldX", "unknown");
-            playerStates.addProperty("worldY", "unknown");
-            playerStates.addProperty("worldPlane", "unknown");
-        }
+            // Add world location if available
+            if (worldLocation != null) {
+                playerStates.addProperty("worldX", worldLocation.getX());
+                playerStates.addProperty("worldY", worldLocation.getY());
+                playerStates.addProperty("worldPlane", worldLocation.getPlane());
+            } else {
+                // Handle the case where player or location is null
+                playerStates.addProperty("worldX", "unknown");
+                playerStates.addProperty("worldY", "unknown");
+                playerStates.addProperty("worldPlane", "unknown");
+            }
 
-        String response = gson.toJson(playerStates);
-        exchange.getResponseHeaders().set("Content-Type", "application/json"); // Set the content type
-        exchange.sendResponseHeaders(200, response.getBytes().length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(response.getBytes());
+            String response = gson.toJson(playerStates);
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(responseBytes);
+            }
+        } catch (Exception e) {
+            System.out.println("Error handling /player-states request: " + e.getMessage()); // Log error
+            e.printStackTrace();
+            try {
+                String errorMessage = "{\"error\":\"Internal server error\"}";
+                exchange.sendResponseHeaders(500, errorMessage.getBytes().length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(errorMessage.getBytes());
+                }
+            } catch (IOException ioException) {
+                ioException.printStackTrace();
+            }
         } finally {
             exchange.close(); // Ensure to close the exchange
         }
