@@ -99,31 +99,46 @@ public class pk_plugin extends Plugin {
                 .collect(Collectors.toSet());
 
         for (NPC npc : npcs) {
-            if (npc != null && npcIdsSet.contains(npc.getId()) && npc.getHealthRatio() == -1 && npc.getHealthScale() == -1) {
-                WorldPoint worldLocation = npc.getWorldLocation();
-                if (worldLocation != null) {
-                    Shape hull = npc.getConvexHull();
-                    if (hull != null) {
-                        Rectangle bounds = hull.getBounds();
-                        JsonObject npcJson = new JsonObject();
-                        npcJson.addProperty("topLeftX", bounds.x);
-                        npcJson.addProperty("topLeftY", bounds.y);
-                        npcJson.addProperty("bottomRightX", bounds.x + bounds.width);
-                        npcJson.addProperty("bottomRightY", bounds.y + bounds.height);
-                        npcJson.addProperty("worldX", worldLocation.getX());
-                        npcJson.addProperty("worldY", worldLocation.getY());
-                        npcJson.addProperty("plane", worldLocation.getPlane());
-                        npcJson.addProperty("healthRatio", npc.getHealthRatio());
-                        npcJson.addProperty("healthScale", npc.getHealthScale());
+            if (npc == null || !npcIdsSet.contains(npc.getId()) || npc.getHealthRatio() != -1 || npc.getHealthScale() != -1) {
+                continue;
+            }
 
-                        npcDataArray.add(npcJson);
-                    }
+            // Ensure we only proceed if the WorldPoint is not null
+            WorldPoint worldLocation = npc.getWorldLocation();
+            if (worldLocation == null) {
+                continue;
+            }
+
+            try {
+                Shape hull = npc.getConvexHull();
+                if (hull == null) {
+                    continue;
                 }
+
+                Rectangle bounds = hull.getBounds();
+                if (bounds == null) {
+                    continue;
+                }
+
+                JsonObject npcJson = new JsonObject();
+                npcJson.addProperty("topLeftX", bounds.x);
+                npcJson.addProperty("topLeftY", bounds.y);
+                npcJson.addProperty("bottomRightX", bounds.x + bounds.width);
+                npcJson.addProperty("bottomRightY", bounds.y + bounds.height);
+                npcJson.addProperty("worldX", worldLocation.getX());
+                npcJson.addProperty("worldY", worldLocation.getY());
+                npcJson.addProperty("plane", worldLocation.getPlane());
+                npcJson.addProperty("healthRatio", npc.getHealthRatio());
+                npcJson.addProperty("healthScale", npc.getHealthScale());
+                npcDataArray.add(npcJson);
+            } catch (Exception e) {
+                // Log the exception or handle it as needed
+                continue;
             }
         }
+
         JsonObject npcData = new JsonObject();
         npcData.add("npcs", npcDataArray);
-        System.out.println(npcData);
         return npcData;
     }
 

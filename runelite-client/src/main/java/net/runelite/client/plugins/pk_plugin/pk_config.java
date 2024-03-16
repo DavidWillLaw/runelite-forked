@@ -23,7 +23,7 @@ public interface pk_config extends Config {
     )
     default String npcsToKill()
     {
-        return "";
+        return "11806";
     }
 
     @ConfigItem(
@@ -33,7 +33,7 @@ public interface pk_config extends Config {
     )
     default String foodToConsume()
     {
-        return "";
+        return "2142";
     }
 
     @ConfigItem(
@@ -43,6 +43,6 @@ public interface pk_config extends Config {
     )
     default int foodHealAmount()
     {
-        return 0;
+        return 99;
     }
 }
